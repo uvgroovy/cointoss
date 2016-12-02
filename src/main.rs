@@ -1,4 +1,11 @@
 extern crate crypto;
+extern crate num;
+
+use std::mem;
+
+use num::bigint::BigUint;
+use num::bigint::ToBigUint;
+use num::ToPrimitive;
 
 use std::fs::File;
 use std::io::{self, Read};
@@ -6,17 +13,19 @@ use std::str::FromStr;
 
 use crypto::digest::Digest;
 
-const LENGTH : usize = 4;
+const SALT_LENGTH : usize = 8;
+const NUMBERS : usize = 2;
 type Hash = crypto::sha1::Sha1;
 
-fn rand() -> [u8; LENGTH] {
-    let mut rnd : [u8; LENGTH] = [0; LENGTH];
+fn rand(bytes : usize) -> BigUint {
+
+    let mut rnd = vec![0; bytes];
 
     let mut f = File::open("/dev/urandom").expect("Unable to open /dev/urandom. please use a normal OS");
 
     f.read_exact(&mut rnd).expect("Unable read random. please use a normal OS");
 
-    rnd
+    BigUint::from_bytes_le(&rnd)
 }
 
 fn ask(q: &str) -> String {
@@ -50,8 +59,9 @@ fn hash(x : &[u8]) -> Vec<u8> {
 }
 
 fn play_a() {
-    let my_rand = rand();
-    let v = hash(&my_rand);
+    let my_rand = rand(SALT_LENGTH);
+    let repr = my_rand.to_bytes_le();
+    let v = hash(&repr);
 
     // print hash
     let s = to_str(&v);
@@ -62,26 +72,21 @@ fn play_a() {
     // xor and print the result and your number
     let ans_v = from_str(&answer);
 
-    if ans_v.len() != my_rand.len() {
-        panic!("Length should be {} ", my_rand.len());
-    }
+    let his_num = BigUint::from_bytes_le(&ans_v);
 
     // now to the fun part!
-    let mut res_vec = vec_with_size( my_rand.len());
+    let res = his_num + my_rand;
 
-    for i in 0..res_vec.len() {
-        res_vec[i] = ans_v[i] ^ my_rand[i];
-    }
-
+    let div = NUMBERS.to_biguint().unwrap();
     // in this lame version we only use one bit.. 
     // but all is ready for better version
-    let res = match res_vec[0] & 1 {
+    let res = match (res % div).to_usize().unwrap() {
         0 => "HEADS",
         1 => "TAILS",
         _ => panic!("bug in rust!")
     };
     println!("Result is {}", res);
-    println!("Your original random is \"{}\". Please send it to B is", to_str(&my_rand));
+    println!("Your original random is \"{}\". Please send it to B is", to_str(&repr));
 
 }
 
@@ -115,19 +120,38 @@ fn play_b() {
     let sig_v = from_str(&sig_ans);
 
     // print your number
-    let my_rand = rand();
+    let div = NUMBERS.to_biguint().unwrap();
+    let my_rand = rand(mem::size_of::<usize>()) % &div;
 
-    println!("Your random number is \"{}\". Please send it to A is", to_str(&my_rand));
+    let repr = my_rand.to_bytes_le();
+
+
+    println!("Your random number is \"{}\". Please send it to A is", to_str(&repr));
     // ask for other guy's number and verify
 
     let his_rand_ans = ask("Please ask A for his original number");
-    let his_rand = from_str(&his_rand_ans);
+    let his_rand_repr = from_str(&his_rand_ans);
 
-    let v = hash(&his_rand);
+    let v = hash(&his_rand_repr);
 
     if v != sig_v {
         panic!("SOMETHING IS WRONG! ABORT!!");
     }
+
+    let his_rand = BigUint::from_bytes_le(&his_rand_repr);
+
+    // make sure math checks out
+    let res = his_rand + my_rand;
+
+    // in this lame version we only use one bit.. 
+    // but all is ready for better version
+    let res = match (res % div).to_usize().unwrap() {
+        0 => "HEADS",
+        1 => "TAILS",
+        _ => panic!("bug in rust!")
+    };
+    
+    println!("Result is {}", res);
     println!("All checks out.")
 }
 
