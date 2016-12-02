@@ -1,0 +1,7 @@
+[package]
+name = "cointoss"
+version = "0.1.0"
+authors = ["Kohavi, Yuval <yuval.kohavi@gmail.com>"]
+
+[dependencies]
+rust-crypto = "^0.2"
